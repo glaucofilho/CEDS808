@@ -8,7 +8,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.neural_network import MLPRegressor
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeRegressor
 
@@ -35,12 +35,14 @@ warnings.filterwarnings("ignore", category=ConvergenceWarning)
 # 2010-01-01  1080999
 # 2022-01-01  1139047
 
+
 populacao = {
     pd.Timestamp("1991-01-01"): 847595,
     pd.Timestamp("2000-01-01"): 969396,
     pd.Timestamp("2010-01-01"): 1080999,
     pd.Timestamp("2022-01-01"): 1139047,
 }
+
 
 # Carregando os dados tipando cada coluna
 df = pd.read_csv(
@@ -65,6 +67,52 @@ df["populacao"] = df["populacao"].interpolate(method="linear")
 # removendo dados falsos de 1991 e 2022
 df.drop(index=[0, 205], inplace=True)
 
+
+# adicionando mais uma feature, investimento em saude corrijido pela inflacao
+# fonte LOA (lei orcamentaria anual) e noticias de jornal
+# sem correcao inflacao IPCA
+# 2015: 1115767005.00, correcao x1,67
+# 2014: 1027369524.00, correcao x1,78
+# 2013: 1000262264.00, correcao x1,88
+# 2012: 846603134.00, correcao x1,99
+# 2011:  807363166.00, correcao x2,12
+# 2010: 717517988.00, correcao x2,24
+# 2009: 654000000.00, correcao x2,34
+# 2008: 518200000.00, correcao x2,48
+# 2007: 445000000.00, correcao x2,59
+# 2006: 400000000.00, correcao x2,67
+# 2005: ?, correcao x2,82
+# 2004: ?, correcao x3,04
+# 2003: ?, correcao x3,32
+# 2002: 218588697.00, correcao x3,74
+# 2001: , correcao x4,02
+# 2000: 188000000.00, correcao x4,26
+# 1999: , correcao x4,64
+# 1998: , correcao x4,72
+# Dados de investimento em saúde e suas correções
+# 2005, 2004, 2003, 2001, 1999 e 1998 foram feitos com interpolacao
+
+investimento_saude = {
+    2015: 1115767005.00 * 1.67,
+    2014: 1027369524.00 * 1.78,
+    2013: 1000262264.00 * 1.88,
+    2012: 846603134.00 * 1.99,
+    2011: 807363166.00 * 2.12,
+    2010: 717517988.00 * 2.24,
+    2009: 654000000.00 * 2.34,
+    2008: 518200000.00 * 2.48,
+    2007: 445000000.00 * 2.59,
+    2006: 400000000.00 * 2.67,
+    2002: 218588697.00 * 3.74,
+    2000: 188000000.00 * 4.26,
+    2005: 1008332363.695,
+    2004: 939141044.39,
+    2003: 880141045.085,
+    2001: 809200863.39,
+    1999: 792559136.61,
+    1998: 784238273.22,
+}
+
 # Transformando a coluna data para mês e ano inteiro
 df["mes"] = df["data"].dt.month
 df["ano"] = df["data"].dt.year
@@ -72,7 +120,10 @@ df["mes"] = df["mes"].astype(int)
 df["ano"] = df["ano"].astype(int)
 del df["data"]
 
-# Remoção de Outliers com método IQR
+# Adicionando o investimento em saude anual
+df["investimento_saude"] = df["ano"].map(investimento_saude)
+
+# Remoção de Outliers
 df = df.drop(df[df["casos-confirmados"] > 5580].index)
 
 # Lidando com valores ausentes imputando a média por mês
@@ -85,15 +136,14 @@ X = df.copy()
 del X["casos-confirmados"]
 y = df["casos-confirmados"]
 
+# Padronizando os dados
+scaler = MinMaxScaler()
+X = scaler.fit_transform(X)
+
 # Dividir os dados em conjuntos de treinamento e teste
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
 )
-
-# Padronizando os dados
-scaler = StandardScaler()
-X_train = scaler.fit_transform(X_train)
-X_test = scaler.transform(X_test)
 
 # Modelos a serem testados
 models = {
